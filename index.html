@@ -409,8 +409,10 @@ async function loadState(){
       // shallow-merge nested defaults for forward-compat
       state.currencies = parsed.currencies || defaultState().currencies;
       state.loan = parsed.loan || defaultState().loan;
+      if(!state.updatedAt) state.updatedAt = new Date().toISOString();
     } else {
       state = defaultState();
+      state.updatedAt = new Date().toISOString();
     }
   } catch(e){
     state = defaultState();
@@ -442,6 +444,7 @@ function refreshSyncViewIfOpen(){
 }
 async function pushToCloud(){
   if(!supa || !syncStatus.loggedIn) return;
+  if(!state.updatedAt) state.updatedAt = new Date().toISOString();
   syncStatus.syncing = true;
   try{
     const { data:{ user } } = await supa.auth.getUser();
