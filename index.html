@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>EDU Finance Manager</title>
+<meta name="description" content="Private personal finance manager for student loan, education costs, budgeting and side-hustle tracking.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#121213">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EDU Finance">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F5F3EE; --surface:#FFFFFF; --surface-alt:#FAF8F4; --border:#E2DED5;
+    --text:#1D1E1C; --text-muted:#6C6A63; --text-faint:#9A968C;
+    --accent:#8A6A3E; --accent-soft:rgba(138,106,62,0.12); --accent-text:#6E5330;
+    --positive:#4B7A5C; --positive-soft:rgba(75,122,92,0.12);
+    --negative:#A2483C; --negative-soft:rgba(162,72,60,0.12);
+    --warn:#9C7A2E; --warn-soft:rgba(156,122,46,0.12);
+    --radius:6px; --shadow: 0 1px 2px rgba(20,18,14,0.06);
+    --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  }
+  [data-theme="dark"]{
+    --bg:#121213; --surface:#1A1B1C; --surface-alt:#202122; --border:#2B2C2D;
+    --text:#ECE9E2; --text-muted:#A19D93; --text-faint:#726F67;
+    --accent:#C9A467; --accent-soft:rgba(201,164,103,0.14); --accent-text:#D8B678;
+    --positive:#84AB8E; --positive-soft:rgba(132,171,142,0.14);
+    --negative:#C4837A; --negative-soft:rgba(196,131,122,0.14);
+    --warn:#CBA45B; --warn-soft:rgba(203,164,91,0.14);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--accent-soft); }
+  .num{ font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
+  a{ color:inherit; }
+  button{ font-family:inherit; }
+  h1,h2,h3,h4{ margin:0; font-weight:600; letter-spacing:-0.01em; }
+  #app{ display:flex; min-height:100vh; }
+
+  /* Sidebar */
+  .sidebar{
+    width:236px; flex-shrink:0; border-right:1px solid var(--border);
+    background:var(--surface); padding:20px 12px; padding-top:calc(20px + env(safe-area-inset-top));
+    display:flex; flex-direction:column;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .brand{ padding:6px 10px 22px 10px; }
+  .brand-name{ font-family:var(--serif); font-size:18px; letter-spacing:0.01em; }
+  .brand-sub{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+  .nav-group{ margin-bottom:14px; }
+  .nav-group-label{ font-size:11px; color:var(--text-faint); padding:0 10px; margin-bottom:4px; text-transform:none; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius);
+    color:var(--text-muted); cursor:pointer; font-size:13.5px; user-select:none;
+  }
+  .nav-item svg{ width:16px; height:16px; flex-shrink:0; opacity:0.85; }
+  .nav-item:hover{ background:var(--surface-alt); color:var(--text); }
+  .nav-item.active{ background:var(--accent-soft); color:var(--accent-text); font-weight:600; }
+  .sidebar-foot{ margin-top:auto; padding:10px; font-size:11px; color:var(--text-faint); border-top:1px solid var(--border); padding-top:12px; }
+
+  /* Main */
+  .main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; padding:16px 28px;
+    padding-top:calc(16px + env(safe-area-inset-top));
+    border-bottom:1px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:5;
+  }
+  .topbar h1{ font-size:16px; }
+  .topbar-sub{ font-size:12px; color:var(--text-faint); margin-top:2px; }
+  .topbar-actions{ display:flex; gap:8px; align-items:center; }
+  #view-root{ padding:24px 28px 90px 28px; max-width:1180px; }
+
+  /* Buttons */
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--surface);
+    color:var(--text); padding:7px 13px; border-radius:var(--radius); font-size:13px; cursor:pointer;
+    transition:border-color .12s ease, background .12s ease;
+  }
+  .btn:hover{ border-color:var(--text-faint); }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#161311; font-weight:600; }
+  [data-theme="dark"] .btn-primary{ color:#161311; }
+  .btn-primary:hover{ opacity:0.92; }
+  .btn-ghost{ border-color:transparent; background:transparent; }
+  .btn-ghost:hover{ background:var(--surface-alt); }
+  .btn-sm{ padding:5px 10px; font-size:12px; }
+  .btn-danger{ color:var(--negative); }
+  .icon-btn{ width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface); cursor:pointer; }
+  .icon-btn svg{ width:16px; height:16px; }
+  .icon-btn:hover{ border-color:var(--text-faint); }
+
+  /* Cards & layout */
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; }
+  .grid{ display:grid; gap:14px; }
+  .grid-3{ grid-template-columns:repeat(3,1fr); }
+  .grid-2{ grid-template-columns:repeat(2,1fr); }
+  .grid-4{ grid-template-columns:repeat(4,1fr); }
+  @media(max-width:920px){ .grid-3,.grid-4{ grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:620px){ .grid-2,.grid-3,.grid-4{ grid-template-columns:1fr;} }
+
+  .label-sm{ font-size:11.5px; color:var(--text-faint); }
+  .hairline{ border:none; border-top:1px solid var(--border); margin:16px 0; }
+
+  .metric{ display:flex; flex-direction:column; gap:4px; }
+  .metric-value{ font-size:20px; font-weight:600; }
+  .metric-value.serif{ font-family:var(--serif); font-size:26px; font-weight:500; }
+  .metric-label{ font-size:12px; color:var(--text-muted); }
+  .metric-delta{ font-size:11.5px; }
+  .pos{ color:var(--positive); } .neg{ color:var(--negative); } .warn-c{ color:var(--warn); }
+
+  .tri-currency{ display:flex; flex-direction:column; gap:2px; }
+  .tri-currency .row{ display:flex; justify-content:space-between; gap:16px; font-size:13px; }
+  .tri-currency .row .cur{ color:var(--text-faint); }
+
+  /* Tables */
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ text-align:left; font-weight:500; color:var(--text-faint); font-size:11.5px; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  td{ padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--surface-alt); }
+  .num-cell{ text-align:right; font-variant-numeric:tabular-nums; }
+  .table-wrap{ overflow-x:auto; }
+  .row-click{ cursor:pointer; }
+
+  /* Badges */
+  .badge{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:20px; font-size:11px; border:1px solid var(--border); color:var(--text-muted); }
+  .badge-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .badge.received{ color:var(--positive); border-color:var(--positive-soft); background:var(--positive-soft); }
+  .badge.upcoming{ color:var(--text-muted); }
+  .badge.partial{ color:var(--warn); border-color:var(--warn-soft); background:var(--warn-soft); }
+  .badge.delayed{ color:var(--negative); border-color:var(--negative-soft); background:var(--negative-soft); }
+  .badge.adjusted{ color:var(--accent-text); border-color:var(--accent-soft); background:var(--accent-soft); }
+  .badge.cancelled{ color:var(--text-faint); text-decoration:line-through; }
+
+  /* Progress */
+  .progress{ height:6px; border-radius:4px; background:var(--surface-alt); border:1px solid var(--border); overflow:hidden; }
+  .progress > div{ height:100%; background:var(--accent); }
+
+  /* Tabs */
+  .tabs{ display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; }
+  .tab{ padding:8px 4px; margin-right:14px; font-size:13px; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active{ color:var(--text); border-color:var(--accent); font-weight:600; }
+
+  /* Section heading */
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+  .section-head h3{ font-size:14px; }
+
+  /* Forms */
+  .field{ display:flex; flex-direction:column; gap:5px; margin-bottom:13px; }
+  .field label{ font-size:12px; color:var(--text-muted); }
+  input,select,textarea{
+    background:var(--surface-alt); border:1px solid var(--border); border-radius:var(--radius);
+    padding:8px 10px; font-size:13px; color:var(--text); font-family:inherit; width:100%;
+  }
+  input:focus,select:focus,textarea:focus{ outline:2px solid var(--accent-soft); border-color:var(--accent); }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .hint{ font-size:11px; color:var(--text-faint); margin-top:3px; }
+
+  /* Modal */
+  .modal-overlay{ position:fixed; inset:0; background:rgba(10,9,7,0.5); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal{ background:var(--surface); border:1px solid var(--border); border-radius:8px; width:460px; max-width:100%; max-height:88vh; overflow-y:auto; padding:22px; box-shadow:0 12px 40px rgba(0,0,0,0.25); }
+  .modal h3{ margin-bottom:14px; font-size:15px; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+  /* Toast */
+  #toast-root{ position:fixed; bottom:18px; right:18px; z-index:60; display:flex; flex-direction:column; gap:8px; }
+  .toast{ background:var(--surface); border:1px solid var(--border); padding:10px 14px; border-radius:var(--radius); font-size:12.5px; box-shadow:var(--shadow); }
+
+  /* FAB */
+  .fab{ position:fixed; bottom:26px; right:26px; z-index:20; }
+  @media(max-width:820px){ .fab{ bottom:80px; right:16px; } }
+
+  /* Bottom nav (mobile) */
+  .bottom-nav{ display:none; }
+  @media(max-width:820px){
+    .sidebar{ display:none; }
+    #view-root{ padding:16px 14px 90px 14px; }
+    .topbar{ padding:14px 16px; }
+    .bottom-nav{
+      display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--surface);
+      border-top:1px solid var(--border); z-index:15; padding:6px 4px;
+      padding-bottom:calc(6px + env(safe-area-inset-bottom));
+    }
+    .bottom-nav .bn-item{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; color:var(--text-faint); font-size:10px; }
+    .bottom-nav .bn-item.active{ color:var(--accent-text); }
+    .bottom-nav svg{ width:18px; height:18px; }
+  }
+
+  .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); }
+  .empty-state svg{ width:26px; height:26px; margin-bottom:10px; opacity:0.5; }
+
+  .kv{ display:flex; justify-content:space-between; padding:6px 0; font-size:13px; border-bottom:1px dashed var(--border); }
+  .kv:last-child{ border-bottom:none; }
+  .kv .k{ color:var(--text-muted); }
+
+  .chip-group{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ padding:5px 11px; border-radius:20px; border:1px solid var(--border); font-size:12px; cursor:pointer; color:var(--text-muted); }
+  .chip.active{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent-text); }
+
+  .audit-item{ font-size:12.5px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .audit-item:last-child{ border-bottom:none; }
+  .audit-time{ color:var(--text-faint); font-size:11px; }
+
+  canvas{ max-width:100%; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">Overview</h1>
+        <div class="topbar-sub" id="page-sub"></div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="theme-toggle" title="Toggle theme"></button>
+        <button class="btn btn-primary btn-sm" id="add-txn-btn">+ Add transaction</button>
+      </div>
+    </div>
+    <div id="view-root"></div>
+  </div>
+</div>
+<nav class="bottom-nav" id="bottom-nav"></nav>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script>
+/* =========================================================
+   EDU FINANCE MANAGER — single-file app
+   Data persists via window.storage (personal, per-user).
+   ========================================================= */
+
+/* ---------- Icons (minimal line set) ---------- */
+const ICONS = {
+  overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
+  loan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 8v5"/></svg>',
+  edu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11a3 3 0 013 3v9H7a3 3 0 01-3-3V6z"/><path d="M20 18V6"/></svg>',
+  money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><circle cx="16.5" cy="14.5" r="1.4"/></svg>',
+  side: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 5-8 4 5"/></svg>',
+  analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.9 2.9l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.9-2.9l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.2a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.9-2.9l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.2a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.9 2.9l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.2a1.7 1.7 0 00-1.6 1z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>',
+  empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 10h18M8 4v4M16 4v4"/></svg>',
+};
+
+/* ---------- Money helpers (decimal-safe via integer cents) ---------- */
+const toCents = n => Math.round((Number(n)||0) * 100);
+const fromCents = c => c / 100;
+const round2 = n => Math.round((Number(n)||0) * 100) / 100;
+function sum(arr){ return fromCents(arr.reduce((s,n)=> s + toCents(n), 0)); }
+
+const CUR_SYMBOL = { MVR:'MVR', USD:'USD', MYR:'MYR' };
+function fmt(amount, currency){
+  const n = round2(amount);
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return `${sign}${CUR_SYMBOL[currency]||currency} ${abs}`;
+}
+function fmtDate(d){
+  if(!d) return '—';
+  const dt = new Date(d+'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
+function daysUntil(d){
+  const dt = new Date(d+'T00:00:00'); const now = new Date(); now.setHours(0,0,0,0);
+  return Math.round((dt-now)/86400000);
+}
+function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
+
+/* ---------- Currency conversion (base = MVR) ---------- */
+function rateToBase(state, currency){
+  if(currency === state.currencies.base) return 1;
+  const r = state.currencies.rates.find(r=>r.currency===currency);
+  return r ? r.rate : 1;
+}
+function convert(state, amount, from, to){
+  if(from===to) return amount;
+  const base = state.currencies.base;
+  const inBase = from===base ? amount : amount * rateToBase(state, from);
+  const out = to===base ? inBase : inBase / rateToBase(state, to);
+  return out;
+}
+function triCurrency(state, amountMVR){
+  return {
+    MVR: amountMVR,
+    USD: convert(state, amountMVR, 'MVR', 'USD'),
+    MYR: convert(state, amountMVR, 'MVR', 'MYR'),
+  };
+}
+
+/* ---------- Default / seed state ---------- */
+function defaultState(){
+  return {
+    version: 1,
+    updatedAt: null,
+    settings: { theme:'dark', appLockPin:null },
+    currencies: {
+      base: 'MVR',
+      rates: [
+        { currency:'USD', rate:15.42, effectiveDate:'2026-09-11', updatedAt:'2026-09-11', source:'Manual estimate — verify against your bank/MMA rate before relying on it.' },
+        { currency:'MYR', rate:3.671, effectiveDate:'2026-09-11', updatedAt:'2026-09-11', source:'Derived from USD/MVR ≈15.42 and USD/MYR ≈4.20. Manual estimate — please verify.' },
+      ],
+    },
+    loan: {
+      recipient:'Ibrahim Shaffaf',
+      program:'Bachelor of Arts (Honours) in Industrial Design',
+      institution:'Asia Pacific University',
+      totalApproved: 859588.03,
+      disbursements: [
+        { id:'d1', seq:1, date:'2026-08-31', stipend:44997.30, establishmentAllowance:6887.34, bookAllowance:2429.70, tuitionFee:211469.88, airfareTo:7221.70, departureAllowance:0, airfareFrom:0, status:'upcoming', receivedAccountId:null },
+        { id:'d2', seq:2, date:'2027-03-01', stipend:44997.30, establishmentAllowance:0, bookAllowance:0, tuitionFee:0, airfareTo:0, departureAllowance:0, airfareFrom:0, status:'upcoming', receivedAccountId:null },
+        { id:'d3', seq:3, date:'2027-09-01', stipend:44997.30, establishmentAllowance:0, bookAllowance:2429.70, tuitionFee:172380.18, airfareTo:0, departureAllowance:0, airfareFrom:0, status:'upcoming', receivedAccountId:null },
+        { id:'d4', seq:4, date:'2028-03-01', stipend:44997.30, establishmentAllowance:0, bookAllowance:0, tuitionFee:0, airfareTo:0, departureAllowance:0, airfareFrom:0, status:'upcoming', receivedAccountId:null },
+        { id:'d5', seq:5, date:'2028-09-01', stipend:44997.30, establishmentAllowance:0, bookAllowance:2429.70, tuitionFee:178424.82, airfareTo:0, departureAllowance:0, airfareFrom:0, status:'upcoming', receivedAccountId:null },
+        { id:'d6', seq:6, date:'2029-03-01', stipend:44997.30, establishmentAllowance:0, bookAllowance:0, tuitionFee:0, airfareTo:0, departureAllowance:1033.10, airfareFrom:4898.11, status:'upcoming', receivedAccountId:null },
+      ],
+    },
+    eduFees: {
+      taxNote:'Fees shown are inclusive of the 6% Sales & Service Tax (SST) applicable under the full-payment option.',
+      years: [
+        { year:1, items:[
+          {label:'Pre-Arrival Application Fee', myr:3400, usd:895},
+          {label:'Post-Arrival Application Fee', myr:2120, usd:556},
+          {label:'International Student Registration Fee', myr:5300, usd:1395},
+          {label:'Library Deposit (Refundable)', myr:500, usd:130, refundable:true},
+          {label:'Personal Bond (Refundable)', myr:1000, usd:265, refundable:true},
+          {label:'De Montfort University Fees — Level 1', myr:2793, usd:737},
+          {label:'Course Fee (Full Payment)', myr:36994, usd:9736},
+        ]},
+        { year:2, items:[
+          {label:'Student Visa Renewal Fees', myr:1537, usd:372},
+          {label:'De Montfort University Fees — Level 2', myr:2793, usd:737},
+          {label:'Course Fees (Full Payment)', myr:38266, usd:10070},
+        ]},
+        { year:3, items:[
+          {label:'Student Visa Renewal Fees', myr:1537, usd:372},
+          {label:'De Montfort University Fees — Level 3', myr:2793, usd:737},
+          {label:'Course Fees (Full Payment)', myr:39750, usd:10462},
+        ]},
+      ],
+    },
+    accounts: [
+      { id:'acc_mvr_bank', name:'Maldives Bank', currency:'MVR', type:'bank', openingBalance:0, notes:'' },
+      { id:'acc_myr_bank', name:'Malaysia Bank', currency:'MYR', type:'bank', openingBalance:0, notes:'' },
+      { id:'acc_usd_wallet', name:'USD Wallet', currency:'USD', type:'wallet', openingBalance:0, notes:'' },
+      { id:'acc_cash', name:'Cash', currency:'MVR', type:'cash', openingBalance:0, notes:'' },
+      { id:'acc_sidehustle', name:'Side Hustle', currency:'MVR', type:'sidehustle', openingBalance:0, notes:'Holds capital moved out of personal accounts into the side hustle.' },
+    ],
+    budgetCategories: [
+      {id:'cat_rent', name:'Rent', group:'Essential'},
+      {id:'cat_food', name:'Food', group:'Essential'},
+      {id:'cat_transport', name:'Transportation', group:'Essential'},
+      {id:'cat_utilities', name:'Utilities', group:'Essential'},
+      {id:'cat_phone', name:'Phone', group:'Essential'},
+      {id:'cat_internet', name:'Internet', group:'Essential'},
+      {id:'cat_health', name:'Healthcare', group:'Essential'},
+      {id:'cat_education', name:'Education', group:'Essential'},
+      {id:'cat_restaurants', name:'Restaurants', group:'Lifestyle'},
+      {id:'cat_shopping', name:'Shopping', group:'Lifestyle'},
+      {id:'cat_entertainment', name:'Entertainment', group:'Lifestyle'},
+      {id:'cat_travel', name:'Travel', group:'Lifestyle'},
+      {id:'cat_subscriptions', name:'Subscriptions', group:'Lifestyle'},
+      {id:'cat_savings', name:'Savings', group:'Financial'},
+      {id:'cat_emergency', name:'Emergency fund', group:'Financial'},
+      {id:'cat_investments', name:'Investments', group:'Financial'},
+      {id:'cat_sidehustle', name:'Side hustle', group:'Financial'},
+    ],
+    budgets: {}, // { 'YYYY-MM': { categoryId: amountInCategoryCurrency(MVR) } }
+    transactions: [], // see TXN_TYPES
+    sideHustleProjects: [],
+    auditLog: [],
+  };
+}
+
+const TXN_TYPES = ['Income','Expense','Transfer','Loan received','Tuition payment','Investment','Side-hustle capital','Side-hustle revenue','Side-hustle expense','Refund','Adjustment'];
+
+/* ---------- Storage ---------- */
+const STORAGE_KEY = 'edu-finance-state-v1';
+let state = null;
+let saveTimer = null;
+function scheduleSave(){
+  state.updatedAt = new Date().toISOString();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ console.error('save failed', e); toast('Could not save — your browser storage may be full or restricted.'); }
+    pushToCloud();
+  }, 250);
+}
+async function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      state = Object.assign(defaultState(), parsed);
+      // shallow-merge nested defaults for forward-compat
+      state.currencies = parsed.currencies || defaultState().currencies;
+      state.loan = parsed.loan || defaultState().loan;
+      if(!state.updatedAt) state.updatedAt = new Date().toISOString();
+    } else {
+      state = defaultState();
+      state.updatedAt = new Date().toISOString();
+    }
+  } catch(e){
+    state = defaultState();
+  }
+}
+
+/* ---------- Cloud sync (optional, via user's own Supabase project) ---------- */
+const SYNC_URL_KEY = 'edu-finance-sync-url';
+const SYNC_ANON_KEY = 'edu-finance-sync-anon-key';
+let supa = null;
+let syncStatus = { configured:false, loggedIn:false, email:null, lastSynced:null, syncing:false, error:null };
+
+function getSyncConfig(){ return { url: localStorage.getItem(SYNC_URL_KEY)||'', key: localStorage.getItem(SYNC_ANON_KEY)||'' }; }
+function setSyncConfig(url,key){ localStorage.setItem(SYNC_URL_KEY,url); localStorage.setItem(SYNC_ANON_KEY,key); }
+function clearSyncConfig(){ localStorage.removeItem(SYNC_URL_KEY); localStorage.removeItem(SYNC_ANON_KEY); supa=null; syncStatus={configured:false,loggedIn:false,email:null,lastSynced:null,syncing:false,error:null}; }
+
+function initSupabase(){
+  const cfg = getSyncConfig();
+  if(cfg.url && cfg.key && window.supabase){
+    try{ supa = window.supabase.createClient(cfg.url, cfg.key); syncStatus.configured = true; }
+    catch(e){ supa = null; syncStatus.configured = false; }
+  } else { supa = null; syncStatus.configured = false; }
+}
+function refreshSyncViewIfOpen(){
+  if(currentView==='settings' && settingsTab==='sync'){
+    const body = document.getElementById('settings-body');
+    if(body) body.innerHTML = renderSettingsBody();
+  }
+}
+async function pushToCloud(){
+  if(!supa || !syncStatus.loggedIn) return;
+  if(!state.updatedAt) state.updatedAt = new Date().toISOString();
+  syncStatus.syncing = true;
+  try{
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) return;
+    const { error } = await supa.from('app_state').upsert({ user_id:user.id, data:state, updated_at: state.updatedAt });
+    if(error) throw error;
+    syncStatus.lastSynced = new Date().toISOString(); syncStatus.error = null;
+  } catch(e){ syncStatus.error = e.message || String(e); }
+  syncStatus.syncing = false;
+  refreshSyncViewIfOpen();
+}
+async function pullAndMerge(){
+  if(!supa) return;
+  try{
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) return;
+    const { data, error } = await supa.from('app_state').select('*').eq('user_id', user.id).maybeSingle();
+    if(error) throw error;
+    if(!data){ await pushToCloud(); return; }
+    const cloudTime = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+    const localTime = state.updatedAt ? new Date(state.updatedAt).getTime() : 0;
+    if(cloudTime > localTime){
+      state = Object.assign(defaultState(), data.data);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      toast('Loaded the newer copy of your data from the cloud.');
+      if(document.getElementById('view-root')) go(currentView);
+    } else if(localTime > cloudTime){
+      await pushToCloud();
+    }
+    syncStatus.lastSynced = new Date().toISOString(); syncStatus.error = null;
+  } catch(e){ syncStatus.error = e.message || String(e); }
+  refreshSyncViewIfOpen();
+}
+async function syncSignUp(email,password){
+  if(!supa) return;
+  const { error } = await supa.auth.signUp({ email, password });
+  if(error){ toast(error.message); return; }
+  toast('Account created. If email confirmation is required, check your inbox — otherwise sign in now.');
+}
+async function syncSignIn(email,password){
+  if(!supa) return;
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if(error){ toast(error.message); return; }
+  syncStatus.loggedIn = true; syncStatus.email = data.user.email;
+  await pullAndMerge();
+  go('settings');
+}
+async function syncSignOut(){
+  if(!supa) return;
+  await supa.auth.signOut();
+  syncStatus.loggedIn = false; syncStatus.email = null;
+  go('settings');
+}
+async function checkSession(){
+  if(!supa) return;
+  try{
+    const { data } = await supa.auth.getSession();
+    if(data.session){ syncStatus.loggedIn = true; syncStatus.email = data.session.user.email; await pullAndMerge(); }
+  } catch(e){ /* ignore — offline or misconfigured */ }
+}
+
+/* ---------- Audit log ---------- */
+function logAudit(action, details){
+  state.auditLog.unshift({ id:uid('a'), ts:new Date().toISOString(), action, details });
+  if(state.auditLog.length > 500) state.auditLog.length = 500;
+}
+
+/* ---------- Derived calculations ---------- */
+function disbTotal(d){
+  return sum([d.stipend,d.establishmentAllowance,d.bookAllowance,d.tuitionFee,d.airfareTo,d.departureAllowance,d.airfareFrom]);
+}
+function disbCashPortion(d){ // everything except tuition (paid direct to university)
+  return sum([d.stipend,d.establishmentAllowance,d.bookAllowance,d.airfareTo,d.departureAllowance,d.airfareFrom]);
+}
+function loanReceivedTotal(){
+  return sum(state.loan.disbursements.filter(d=>d.status==='received').map(disbTotal));
+}
+function loanRemainingTotal(){
+  return round2(state.loan.totalApproved - loanReceivedTotal());
+}
+function nextDisbursement(){
+  const upcoming = state.loan.disbursements.filter(d=>d.status!=='received').sort((a,b)=>a.date.localeCompare(b.date));
+  return upcoming[0] || null;
+}
+function accountBalance(accId){
+  const acc = state.accounts.find(a=>a.id===accId);
+  if(!acc) return 0;
+  let bal = acc.openingBalance;
+  state.transactions.forEach(t=>{
+    if(t.accountId===accId){
+      const amt = convert(state, t.amount, t.currency, acc.currency); // convert entered amount into this account's own currency
+      if(t.type==='Transfer' && t.destAccountId){ bal -= amt; }
+      else if(['Expense','Tuition payment','Side-hustle capital','Side-hustle expense'].includes(t.type)){ bal -= amt; }
+      else { bal += amt; } // Income, Loan received, Side-hustle revenue, Refund, Investment(in), Adjustment(signed)
+    }
+    if(t.type==='Transfer' && t.destAccountId===accId){
+      const amt = convert(state, t.amount, t.currency, acc.currency);
+      bal += amt;
+    }
+  });
+  return round2(bal);
+}
+function totalAvailableMVR(){
+  let totalCents = 0;
+  state.accounts.forEach(a=>{
+    if(a.type==='sidehustle') return; // side hustle capital tracked separately, not "available" personal cash
+    const bal = accountBalance(a.id);
+    totalCents += toCents(convert(state, bal, a.currency, 'MVR'));
+  });
+  return fromCents(totalCents);
+}
+function sideHustleCapitalOutstanding(){
+  return state.sideHustleProjects.reduce((s,p)=> s + round2(projectStats(p).capitalOutstanding), 0);
+}
+function projectStats(p){
+  const txns = state.transactions.filter(t=>t.projectId===p.id);
+  const toMVR = t => convert(state, t.amount, t.currency, 'MVR');
+  const capital = sum(txns.filter(t=>t.type==='Side-hustle capital').map(toMVR));
+  const revenue = sum(txns.filter(t=>t.type==='Side-hustle revenue').map(toMVR));
+  const expenses = sum(txns.filter(t=>t.type==='Side-hustle expense').map(toMVR));
+  const recovered = Math.min(capital, revenue);
+  const netProfit = round2(revenue - expenses - capital + Math.min(capital, Math.max(0,capital))*0); // profit = revenue - expenses - capital baseline
+  const profit = round2(revenue - expenses - capital);
+  const capitalOutstanding = round2(Math.max(0, capital - revenue));
+  const roi = capital>0 ? round2((profit/capital)*100) : 0;
+  return { capital, revenue, expenses, recovered, profit, capitalOutstanding, roi };
+}
+function currentBudgetMonth(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function budgetForMonth(month){
+  return state.budgets[month] || {};
+}
+function spentInMonth(month, categoryId){
+  return sum(state.transactions.filter(t=>t.type==='Expense' && t.categoryId===categoryId && t.date.slice(0,7)===month)
+    .map(t=>convert(state, t.amount, t.currency, 'MVR')));
+}
+
+/* ---------- Toast ---------- */
+function toast(msg){
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  root.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 3200);
+}
+
+/* ---------- Modal ---------- */
+function openModal(html){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="modal-overlay" id="modal-overlay"><div class="modal">${html}</div></div>`;
+  document.getElementById('modal-overlay').addEventListener('mousedown', (e)=>{
+    if(e.target.id==='modal-overlay') closeModal();
+  });
+}
+function closeModal(){ document.getElementById('modal-root').innerHTML = ''; }
+
+/* ---------- Navigation ---------- */
+const NAV = [
+  { id:'overview', label:'Overview', icon:'overview' },
+  { id:'loan', label:'Student Loan', icon:'loan' },
+  { id:'education', label:'Education', icon:'edu' },
+  { id:'accounts', label:'Accounts', icon:'money', group:'Money' },
+  { id:'transactions', label:'Transactions', icon:'money', group:'Money' },
+  { id:'budgets', label:'Budgets', icon:'money', group:'Money' },
+  { id:'sidehustle', label:'Side Hustle', icon:'side' },
+  { id:'analytics', label:'Analytics', icon:'analytics' },
+  { id:'settings', label:'Settings', icon:'settings' },
+];
+const MOBILE_NAV = ['overview','loan','transactions','sidehustle','settings'];
+let currentView = 'overview';
+
+function renderSidebar(){
+  const groups = { '':[], 'Money':[] };
+  NAV.forEach(n=> (groups[n.group||''] = groups[n.group||''] || []).push(n));
+  let html = `<div class="brand"><div class="brand-name">EDU Finance Manager</div><div class="brand-sub">${state.loan.recipient}</div></div>`;
+  Object.keys(groups).forEach(g=>{
+    if(!groups[g].length) return;
+    html += `<div class="nav-group">`;
+    if(g) html += `<div class="nav-group-label">${g}</div>`;
+    groups[g].forEach(n=>{
+      html += `<div class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${ICONS[n.icon]}<span>${n.label}</span></div>`;
+    });
+    html += `</div>`;
+  });
+  html += `<div class="sidebar-foot">Data stored privately to your account.<br>No trackers, no ads.</div>`;
+  document.getElementById('sidebar').innerHTML = html;
+
+  document.getElementById('bottom-nav').innerHTML = MOBILE_NAV.map(id=>{
+    const n = NAV.find(x=>x.id===id);
+    return `<div class="bn-item ${currentView===id?'active':''}" data-nav="${id}">${ICONS[n.icon]}<span>${n.label}</span></div>`;
+  }).join('');
+}
+
+function go(view){
+  currentView = view;
+  renderSidebar();
+  const titles = { overview:['Overview',''], loan:['Student Loan','Approved amount, disbursements & progress'], education:['Education','APU fee structure & cost projection'],
+    accounts:['Accounts','Balances across banks, cash and wallets'], transactions:['Transactions','Full ledger of financial activity'], budgets:['Budgets','Monthly plan vs. actual spending'],
+    sidehustle:['Side Hustle','Capital, revenue, expenses & profit'], analytics:['Analytics','Cash flow, budgets & projections'], settings:['Settings','Currency, data, security & appearance'] };
+  document.getElementById('page-title').textContent = titles[view][0];
+  document.getElementById('page-sub').textContent = titles[view][1];
+  const root = document.getElementById('view-root');
+  root.innerHTML = ({
+    overview: renderOverview, loan: renderLoan, education: renderEducation,
+    accounts: renderAccounts, transactions: renderTransactions, budgets: renderBudgets,
+    sidehustle: renderSideHustle, analytics: renderAnalytics, settings: renderSettings,
+  })[view]();
+  if(view==='analytics') mountAnalyticsCharts();
+  if(view==='overview') mountOverviewChart();
+  window.scrollTo(0,0);
+}
+
+/* ---------- View: Overview ---------- */
+function renderOverview(){
+  const avail = totalAvailableMVR();
+  const tri = triCurrency(state, avail);
+  const received = loanReceivedTotal();
+  const remaining = loanRemainingTotal();
+  const next = nextDisbursement();
+  const month = currentBudgetMonth();
+  const budget = budgetForMonth(month);
+  const budgetTotal = Object.values(budget).reduce((a,b)=>a+Number(b||0),0);
+  const spentTotal = state.budgetCategories.reduce((s,c)=> s + spentInMonth(month, c.id), 0);
+  const shOutstanding = sideHustleCapitalOutstanding();
+  const shProfit = round2(state.sideHustleProjects.reduce((s,p)=> s + projectStats(p).profit, 0));
+  const upcoming = state.loan.disbursements.filter(d=>d.status!=='received').slice(0,3);
+  const recentTxns = [...state.transactions].sort((a,b)=> b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0,8);
+
+  return `
+  <div class="grid" style="gap:14px;">
+    <div class="card">
+      <div class="label-sm">TOTAL AVAILABLE · ACTUAL</div>
+      <div class="metric-value serif" style="margin-top:6px;">${fmt(tri.MVR,'MVR')}</div>
+      <div class="tri-currency" style="margin-top:8px;">
+        <div class="row"><span class="cur">USD</span><span class="num">${fmt(tri.USD,'USD')}</span></div>
+        <div class="row"><span class="cur">MYR</span><span class="num">${fmt(tri.MYR,'MYR')}</span></div>
+      </div>
+      <div class="hint" style="margin-top:8px;">Sum of personal account balances, converted at your saved rates. Excludes side-hustle capital and undisbursed loan funds.</div>
+    </div>
+
+    <div class="grid grid-4">
+      <div class="card metric">
+        <div class="metric-label">Loan received</div>
+        <div class="metric-value num">${fmt(received,'MVR')}</div>
+        <div class="metric-delta">of ${fmt(state.loan.totalApproved,'MVR')} approved</div>
+      </div>
+      <div class="card metric">
+        <div class="metric-label">Loan remaining</div>
+        <div class="metric-value num">${fmt(remaining,'MVR')}</div>
+        <div class="metric-delta">${next? `Next: ${fmtDate(next.date)} (${daysUntil(next.date)}d)` : 'Fully scheduled'}</div>
+      </div>
+      <div class="card metric">
+        <div class="metric-label">Budget remaining — ${month}</div>
+        <div class="metric-value num ${budgetTotal-spentTotal<0?'neg':''}">${fmt(budgetTotal-spentTotal,'MVR')}</div>
+        <div class="metric-delta">${fmt(spentTotal,'MVR')} spent of ${fmt(budgetTotal,'MVR')}</div>
+      </div>
+      <div class="card metric">
+        <div class="metric-label">Side-hustle profit</div>
+        <div class="metric-value num ${shProfit<0?'neg':'pos'}">${fmt(shProfit,'MVR')}</div>
+        <div class="metric-delta">${fmt(shOutstanding,'MVR')} capital outstanding</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="section-head"><h3>Upcoming disbursements</h3><span class="label-sm" style="cursor:pointer;" data-nav="loan">View all →</span></div>
+        ${upcoming.length? upcoming.map(d=>`
+          <div class="kv"><span class="k">${fmtDate(d.date)}</span><span class="num">${fmt(disbTotal(d),'MVR')}</span></div>
+        `).join('') : `<div class="hint">All scheduled disbursements have been marked received.</div>`}
+      </div>
+      <div class="card">
+        <div class="section-head"><h3>This month's budget</h3><span class="label-sm" style="cursor:pointer;" data-nav="budgets">Manage →</span></div>
+        ${budgetTotal>0? `
+          <div class="progress" style="margin:8px 0 10px 0;"><div style="width:${Math.min(100,(spentTotal/budgetTotal*100)||0)}%; background:${spentTotal>budgetTotal?'var(--negative)':'var(--accent)'}"></div></div>
+          <div class="kv"><span class="k">Spent</span><span class="num">${fmt(spentTotal,'MVR')}</span></div>
+          <div class="kv"><span class="k">Remaining</span><span class="num">${fmt(budgetTotal-spentTotal,'MVR')}</span></div>
+        ` : `<div class="hint">No budget set for ${month} yet.</div>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head"><h3>Cash balance over time</h3><span class="label-sm" style="cursor:pointer;" data-nav="analytics">Full analytics →</span></div>
+      <canvas id="chart-overview-cashflow" height="130"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="section-head"><h3>Transaction history</h3><span class="label-sm" style="cursor:pointer;" data-nav="transactions">View all →</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Account</th><th class="num-cell">Amount</th></tr></thead>
+        <tbody>
+        ${recentTxns.length? recentTxns.map(t=>`
+          <tr>
+            <td>${fmtDate(t.date)}</td>
+            <td><span class="badge">${t.type}</span></td>
+            <td>${t.description||'—'}</td>
+            <td>${accName(t.accountId)}${t.destAccountId? ' → '+accName(t.destAccountId):''}</td>
+            <td class="num-cell ${['Expense','Tuition payment','Side-hustle capital','Side-hustle expense'].includes(t.type)?'neg':'pos'}">${fmt(t.amount,t.currency)}</td>
+          </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state">${ICONS.empty}<div>No transactions yet.</div></div></td></tr>`}
+        </tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+function mountOverviewChart(){
+  if(!window.Chart) return;
+  const canvas = document.getElementById('chart-overview-cashflow');
+  if(!canvas) return;
+  const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+  const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+  Chart.defaults.color = textColor; Chart.defaults.font.size = 11; Chart.defaults.borderColor = gridColor;
+  const points = buildCashflowPoints();
+  new Chart(canvas, { type:'line',
+    data:{ labels:points.map(p=>p.x), datasets:[{ data:points.map(p=>p.y), borderColor: accentColor(), backgroundColor: softAccent(), fill:true, tension:0.25, pointRadius:0, borderWidth:2 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{grid:{color:gridColor}} } } });
+}
+
+/* ---------- View: Loan ---------- */
+function renderLoan(){
+  const received = loanReceivedTotal();
+  const remaining = loanRemainingTotal();
+  const pct = state.loan.totalApproved>0 ? round2(received/state.loan.totalApproved*100) : 0;
+  const next = nextDisbursement();
+  const totals = {
+    stipend: sum(state.loan.disbursements.map(d=>d.stipend)),
+    tuition: sum(state.loan.disbursements.map(d=>d.tuitionFee)),
+    allowances: sum(state.loan.disbursements.map(d=>sum([d.establishmentAllowance,d.bookAllowance,d.departureAllowance]))),
+    airfare: sum(state.loan.disbursements.map(d=>sum([d.airfareTo,d.airfareFrom]))),
+  };
+  const scheduleSum = sum(state.loan.disbursements.map(disbTotal));
+  const discrepancy = round2(scheduleSum - state.loan.totalApproved);
+
+  return `
+  <div class="card" style="margin-bottom:16px;">
+    <div class="grid grid-3">
+      <div><div class="label-sm">RECIPIENT</div><div style="margin-top:4px;">${state.loan.recipient}</div></div>
+      <div><div class="label-sm">PROGRAM</div><div style="margin-top:4px;">${state.loan.program}</div></div>
+      <div><div class="label-sm">INSTITUTION</div><div style="margin-top:4px;">${state.loan.institution}</div></div>
+    </div>
+  </div>
+
+  <div class="grid grid-3" style="margin-bottom:16px;">
+    <div class="card metric"><div class="metric-label">Total approved</div><div class="metric-value num">${fmt(state.loan.totalApproved,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Received</div><div class="metric-value num">${fmt(received,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Remaining</div><div class="metric-value num">${fmt(remaining,'MVR')}</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-head"><h3>${pct}% of total loan received</h3><span class="label-sm">${fmt(received,'MVR')} / ${fmt(state.loan.totalApproved,'MVR')}</span></div>
+    <div class="progress"><div style="width:${Math.min(100,pct)}%"></div></div>
+    ${next? `<div class="hint" style="margin-top:10px;">Next disbursement: ${fmtDate(next.date)} · ${fmt(disbTotal(next),'MVR')} · in ${daysUntil(next.date)} days</div>`:''}
+    ${Math.abs(discrepancy)>0.005 ? `<div class="hint" style="color:var(--negative); margin-top:8px;">⚠ Schedule total (${fmt(scheduleSum,'MVR')}) does not reconcile with the approved amount — difference of ${fmt(discrepancy,'MVR')}. Check disbursement entries.</div>` : ''}
+  </div>
+
+  <div class="grid grid-4" style="margin-bottom:16px;">
+    <div class="card metric"><div class="metric-label">Total stipend</div><div class="metric-value num" style="font-size:15px;">${fmt(totals.stipend,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Total tuition</div><div class="metric-value num" style="font-size:15px;">${fmt(totals.tuition,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Total allowances</div><div class="metric-value num" style="font-size:15px;">${fmt(totals.allowances,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Total airfare</div><div class="metric-value num" style="font-size:15px;">${fmt(totals.airfare,'MVR')}</div></div>
+  </div>
+
+  <div class="card">
+    <div class="section-head"><h3>Disbursement schedule</h3></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Status</th><th class="num-cell">Stipend</th><th class="num-cell">Tuition</th><th class="num-cell">Allowances</th><th class="num-cell">Airfare</th><th class="num-cell">Total</th><th></th></tr></thead>
+      <tbody>
+      ${state.loan.disbursements.map(d=>{
+        const allow = sum([d.establishmentAllowance,d.bookAllowance,d.departureAllowance]);
+        const air = sum([d.airfareTo,d.airfareFrom]);
+        return `<tr class="row-click" data-disb="${d.id}">
+          <td>${fmtDate(d.date)}</td>
+          <td><span class="badge ${d.status}"><span class="badge-dot"></span>${d.status}</span></td>
+          <td class="num-cell">${d.stipend? fmt(d.stipend,'MVR'):'—'}</td>
+          <td class="num-cell">${d.tuitionFee? fmt(d.tuitionFee,'MVR'):'—'}</td>
+          <td class="num-cell">${allow? fmt(allow,'MVR'):'—'}</td>
+          <td class="num-cell">${air? fmt(air,'MVR'):'—'}</td>
+          <td class="num-cell" style="font-weight:600;">${fmt(disbTotal(d),'MVR')}</td>
+          <td><button class="btn btn-sm" data-disb-detail="${d.id}">Detail</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+function openDisbursementModal(id){
+  const d = state.loan.disbursements.find(x=>x.id===id);
+  if(!d) return;
+  const rows = [
+    ['Stipend', d.stipend], ['Establishment allowance', d.establishmentAllowance], ['Book allowance', d.bookAllowance],
+    ['Tuition fee', d.tuitionFee], ['Airfare to place of study', d.airfareTo], ['Departure allowance', d.departureAllowance], ['Airfare from place of study', d.airfareFrom],
+  ].filter(r=>r[1]>0);
+  const acctOptions = state.accounts.filter(a=>a.type!=='sidehustle').map(a=>`<option value="${a.id}">${a.name} (${a.currency})</option>`).join('');
+  openModal(`
+    <h3>Disbursement ${d.seq} · ${fmtDate(d.date)}</h3>
+    ${rows.map(r=>`<div class="kv"><span class="k">${r[0]}</span><span class="num">${fmt(r[1],'MVR')}</span></div>`).join('')}
+    <div class="kv" style="font-weight:600;"><span class="k">Total</span><span class="num">${fmt(disbTotal(d),'MVR')}</span></div>
+    <hr class="hairline">
+    ${d.status==='received' ? `<div class="hint">Marked received. The full disbursement amount was credited to your selected account. Record the tuition payment yourself in Transactions when you actually pay it — use the "Tuition payment" type, which offers your known tuition amounts as quick presets.</div>
+      <div class="modal-actions"><button class="btn" data-close>Close</button></div>` : `
+      <div class="field">
+        <label>Mark as received — credit full amount to</label>
+        <select id="disb-account">${acctOptions}</select>
+        <div class="hint">The full ${fmt(disbTotal(d),'MVR')} will be credited to this account, including the tuition portion. Nothing is deducted automatically — record the tuition payment yourself later from Transactions.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" data-mark-received="${d.id}">Mark received</button>
+      </div>
+    `}
+  `);
+}
+function markDisbursementReceived(id){
+  const d = state.loan.disbursements.find(x=>x.id===id);
+  const accSel = document.getElementById('disb-account');
+  const accId = accSel ? accSel.value : null;
+  if(!accId){ toast('Choose an account first.'); return; }
+  const total = disbTotal(d);
+  if(total>0){
+    state.transactions.push({ id:uid('t'), date:d.date, type:'Loan received', amount:total, currency:'MVR', accountId:accId, categoryId:null,
+      description:`Loan disbursement ${d.seq} — full amount`, notes:'', disbursementId:d.id, createdAt:new Date().toISOString() });
+  }
+  d.status = 'received';
+  d.receivedAccountId = accId;
+  logAudit('Marked disbursement received', `Disbursement ${d.seq} (${fmtDate(d.date)}) — ${fmt(total,'MVR')} credited in full (tuition not deducted automatically).`);
+  scheduleSave(); closeModal(); toast('Disbursement marked received — full amount credited.'); go('loan');
+}
+
+/* ---------- View: Education ---------- */
+function renderEducation(){
+  const years = state.eduFees.years;
+  const yearTotalMYR = y => sum(y.items.map(i=>i.myr));
+  const yearTotalUSD = y => sum(y.items.map(i=>i.usd));
+  const grandMYR = sum(years.map(yearTotalMYR));
+  const grandUSD = sum(years.map(yearTotalUSD));
+  const grandMVR = convert(state, grandMYR, 'MYR', 'MVR');
+  const tuitionFromLoanMVR = sum(state.loan.disbursements.map(d=>d.tuitionFee));
+
+  return `
+  <div class="grid grid-3" style="margin-bottom:16px;">
+    <div class="card metric"><div class="metric-label">Total expected (3 yrs)</div><div class="metric-value num">${fmt(grandMYR,'MYR')}</div><div class="metric-delta">≈ ${fmt(grandMVR,'MVR')} · ${fmt(grandUSD,'USD')}</div></div>
+    <div class="card metric"><div class="metric-label">Tuition allocated in loan</div><div class="metric-value num">${fmt(tuitionFromLoanMVR,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Coverage</div><div class="metric-value num">${grandMVR>0? round2(tuitionFromLoanMVR/grandMVR*100):0}%</div><div class="metric-delta">loan tuition vs. total expected education cost</div></div>
+  </div>
+  <div class="hint" style="margin-bottom:16px;">${state.eduFees.taxNote}</div>
+  ${years.map(y=>`
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-head"><h3>Degree Year ${y.year}</h3><span class="label-sm">${fmt(yearTotalMYR(y),'MYR')} · ${fmt(yearTotalUSD(y),'USD')}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th class="num-cell">RM</th><th class="num-cell">USD</th></tr></thead>
+        <tbody>${y.items.map(i=>`<tr><td>${i.label}${i.refundable?' <span class="badge">refundable</span>':''}</td><td class="num-cell">${fmt(i.myr,'MYR')}</td><td class="num-cell">${fmt(i.usd,'USD')}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+  `).join('')}
+  <div class="hint">Values are editable — this feature isn't built into the interface yet; use Settings → Export Data, edit the JSON, then Import to update fee figures precisely.</div>
+  `;
+}
+
+/* ---------- View: Accounts ---------- */
+function renderAccounts(){
+  return `
+  <div class="section-head"><h3>Accounts</h3><button class="btn btn-sm" id="add-account-btn">+ Add account</button></div>
+  <div class="grid grid-3">
+  ${state.accounts.map(a=>{
+    const bal = accountBalance(a.id);
+    return `<div class="card">
+      <div class="section-head" style="margin-bottom:6px;"><h3 style="font-size:13px;">${a.name}</h3><span class="badge">${a.type}</span></div>
+      <div class="metric-value num" style="font-size:19px;">${fmt(bal,a.currency)}</div>
+      <div class="hint">Opening balance ${fmt(a.openingBalance,a.currency)}${a.notes? ' · '+a.notes: ''}</div>
+      <div style="margin-top:10px; display:flex; gap:6px;"><button class="btn btn-sm" data-edit-account="${a.id}">Edit</button></div>
+    </div>`;
+  }).join('')}
+  </div>`;
+}
+function openAccountModal(id){
+  const a = id ? state.accounts.find(x=>x.id===id) : null;
+  openModal(`
+    <h3>${a?'Edit account':'Add account'}</h3>
+    <div class="field"><label>Name</label><input id="f-name" value="${a?a.name:''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Currency</label><select id="f-currency"><option ${a&&a.currency==='MVR'?'selected':''}>MVR</option><option ${a&&a.currency==='USD'?'selected':''}>USD</option><option ${a&&a.currency==='MYR'?'selected':''}>MYR</option></select></div>
+      <div class="field"><label>Type</label><select id="f-type">${['bank','cash','wallet','savings','sidehustle','other'].map(t=>`<option ${a&&a.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Opening balance</label><input id="f-opening" type="number" step="0.01" value="${a?a.openingBalance:0}"></div>
+    <div class="field"><label>Notes</label><input id="f-notes" value="${a?a.notes:''}"></div>
+    <div class="modal-actions">
+      ${a?`<button class="btn btn-danger" data-delete-account="${a.id}">Delete</button>`:''}
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" data-save-account="${a?a.id:''}">Save</button>
+    </div>
+  `);
+}
+function saveAccount(id){
+  const name = document.getElementById('f-name').value.trim();
+  const currency = document.getElementById('f-currency').value;
+  const type = document.getElementById('f-type').value;
+  const opening = parseFloat(document.getElementById('f-opening').value)||0;
+  const notes = document.getElementById('f-notes').value.trim();
+  if(!name){ toast('Name is required.'); return; }
+  if(id){
+    const a = state.accounts.find(x=>x.id===id);
+    Object.assign(a, {name,currency,type,openingBalance:opening,notes});
+    logAudit('Edited account', name);
+  } else {
+    state.accounts.push({ id:uid('acc'), name,currency,type,openingBalance:opening,notes });
+    logAudit('Added account', name);
+  }
+  scheduleSave(); closeModal(); go('accounts');
+}
+function deleteAccount(id){
+  const inUse = state.transactions.some(t=>t.accountId===id || t.destAccountId===id);
+  if(inUse){ toast('This account has transactions linked to it and cannot be deleted.'); return; }
+  const a = state.accounts.find(x=>x.id===id);
+  state.accounts = state.accounts.filter(x=>x.id!==id);
+  logAudit('Deleted account', a?a.name:id);
+  scheduleSave(); closeModal(); go('accounts');
+}
+
+/* ---------- View: Transactions ---------- */
+function catName(id){ return (state.budgetCategories.find(c=>c.id===id)||{}).name || '—'; }
+function accName(id){ return (state.accounts.find(a=>a.id===id)||{}).name || '—'; }
+let txnFilter = 'all';
+function renderTransactions(){
+  const rows = [...state.transactions].sort((a,b)=> b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const filtered = txnFilter==='all' ? rows : rows.filter(t=>t.type===txnFilter);
+  return `
+  <div class="chip-group" style="margin-bottom:14px;">
+    <div class="chip ${txnFilter==='all'?'active':''}" data-filter="all">All</div>
+    ${TXN_TYPES.map(t=>`<div class="chip ${txnFilter===t?'active':''}" data-filter="${t}">${t}</div>`).join('')}
+  </div>
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th>Account</th><th class="num-cell">Amount</th></tr></thead>
+      <tbody>
+      ${filtered.length? filtered.map(t=>`
+        <tr>
+          <td>${fmtDate(t.date)}</td>
+          <td><span class="badge">${t.type}</span></td>
+          <td>${t.description||'—'}</td>
+          <td>${catName(t.categoryId)}</td>
+          <td>${accName(t.accountId)}${t.destAccountId? ' → '+accName(t.destAccountId):''}</td>
+          <td class="num-cell ${['Expense','Tuition payment','Side-hustle capital','Side-hustle expense'].includes(t.type)?'neg':'pos'}">${fmt(t.amount,t.currency)}</td>
+        </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state">${ICONS.empty}<div>No transactions yet. Use "Add transaction" to record your first entry.</div></div></td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ---------- Add transaction modal ---------- */
+function tuitionPresets(){
+  const list = [];
+  state.loan.disbursements.forEach(d=>{
+    if(d.tuitionFee>0) list.push({ label:`Loan schedule — disbursement ${d.seq} tuition (${fmtDate(d.date)})`, amount:d.tuitionFee, currency:'MVR' });
+  });
+  state.eduFees.years.forEach(y=>{
+    const courseItem = y.items.find(i=>/course fee/i.test(i.label));
+    if(courseItem) list.push({ label:`APU Year ${y.year} course fee`, amount:courseItem.myr, currency:'MYR' });
+  });
+  return list;
+}
+function openAddTransactionModal(){
+  const accOptions = state.accounts.filter(a=>a.type!=='sidehustle').map(a=>`<option value="${a.id}">${a.name} (${a.currency})</option>`).join('');
+  const allAccOptions = state.accounts.map(a=>`<option value="${a.id}">${a.name} (${a.currency})</option>`).join('');
+  const catOptions = state.budgetCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const projOptions = state.sideHustleProjects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const presets = tuitionPresets();
+  openModal(`
+    <h3>Add transaction</h3>
+    <div class="field"><label>Type</label><select id="t-type">${TXN_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+    <div class="field" id="t-tuition-wrap" style="display:none;">
+      <label>Tuition amount (pick one, or choose Custom)</label>
+      <select id="t-tuition-preset"><option value="">Custom amount</option>${presets.map((p,i)=>`<option value="${i}">${p.label} — ${fmt(p.amount,p.currency)}</option>`).join('')}</select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Amount</label><input id="t-amount" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Currency</label><select id="t-currency"><option>MVR</option><option>USD</option><option>MYR</option></select></div>
+    </div>
+    <div class="hint" style="margin-top:-8px; margin-bottom:13px;">If this currency differs from the account's own currency, the amount is converted automatically using your saved exchange rates (Settings → Currency) before it's applied to the balance.</div>
+    <div class="field"><label>Account</label><select id="t-account">${accOptions}</select></div>
+    <div class="field" id="t-dest-wrap" style="display:none;"><label>Destination account (transfers only)</label><select id="t-dest">${allAccOptions}</select></div>
+    <div class="field" id="t-cat-wrap"><label>Category</label><select id="t-category"><option value="">—</option>${catOptions}</select></div>
+    <div class="field" id="t-proj-wrap" style="display:none;"><label>Side-hustle project</label><select id="t-project"><option value="">—</option>${projOptions}</select></div>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input id="t-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Description</label><input id="t-desc" placeholder="e.g. Dinner"></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="t-notes"></div>
+    <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" data-save-txn>Save</button></div>
+  `);
+  const typeSel = document.getElementById('t-type');
+  const toggle = ()=>{
+    const v = typeSel.value;
+    document.getElementById('t-dest-wrap').style.display = v==='Transfer' ? 'block':'none';
+    document.getElementById('t-proj-wrap').style.display = v.startsWith('Side-hustle') ? 'block':'none';
+    document.getElementById('t-cat-wrap').style.display = (v==='Transfer'||v.startsWith('Side-hustle')) ? 'none':'block';
+    document.getElementById('t-tuition-wrap').style.display = v==='Tuition payment' ? 'block':'none';
+    if(v==='Tuition payment' && document.getElementById('t-category').value===''){ document.getElementById('t-category').value = 'cat_education'; }
+  };
+  typeSel.addEventListener('change', toggle); toggle();
+  const presetSel = document.getElementById('t-tuition-preset');
+  presetSel.addEventListener('change', (e)=>{
+    if(e.target.value==='') return;
+    const p = presets[Number(e.target.value)];
+    document.getElementById('t-amount').value = p.amount;
+    document.getElementById('t-currency').value = p.currency;
+  });
+}
+function saveTransaction(){
+  const type = document.getElementById('t-type').value;
+  const amount = parseFloat(document.getElementById('t-amount').value);
+  const currency = document.getElementById('t-currency').value;
+  const accountId = document.getElementById('t-account').value;
+  const destAccountId = type==='Transfer' ? document.getElementById('t-dest').value : null;
+  const categoryId = document.getElementById('t-category') && document.getElementById('t-category').value || null;
+  const projectId = document.getElementById('t-project') && document.getElementById('t-project').value || null;
+  const date = document.getElementById('t-date').value;
+  const description = document.getElementById('t-desc').value.trim();
+  const notes = document.getElementById('t-notes').value.trim();
+  if(!amount || amount<=0){ toast('Enter a valid amount.'); return; }
+  if(!date){ toast('Pick a date.'); return; }
+  if(type==='Transfer' && destAccountId===accountId){ toast('Source and destination accounts must differ.'); return; }
+  state.transactions.push({ id:uid('t'), date, type, amount:round2(amount), currency, accountId, destAccountId, categoryId: type.startsWith('Side-hustle')?null:categoryId,
+    projectId: type.startsWith('Side-hustle')?projectId:null, description, notes, createdAt:new Date().toISOString() });
+  logAudit('Added transaction', `${type} · ${fmt(amount,currency)} · ${description||'no description'}`);
+  scheduleSave(); closeModal(); toast('Transaction saved.'); go(currentView==='transactions'||currentView==='overview'||currentView==='accounts'?currentView:'transactions');
+}
+
+/* ---------- View: Budgets ---------- */
+let budgetMonth = currentBudgetMonth();
+function renderBudgets(){
+  const cats = state.budgetCategories;
+  const groups = [...new Set(cats.map(c=>c.group))];
+  const budget = budgetForMonth(budgetMonth);
+  const totalBudget = Object.values(budget).reduce((a,b)=>a+Number(b||0),0);
+  const totalSpent = cats.reduce((s,c)=>s+spentInMonth(budgetMonth,c.id),0);
+  return `
+  <div class="section-head">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="month" id="budget-month" value="${budgetMonth}" style="width:auto;">
+    </div>
+    <span class="label-sm">Spent ${fmt(totalSpent,'MVR')} / Budget ${fmt(totalBudget,'MVR')}</span>
+  </div>
+  ${groups.map(g=>`
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-head"><h3>${g}</h3></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Category</th><th class="num-cell">Budget (MVR)</th><th class="num-cell">Spent</th><th class="num-cell">Remaining</th><th></th></tr></thead>
+        <tbody>
+        ${cats.filter(c=>c.group===g).map(c=>{
+          const b = Number(budget[c.id]||0); const s = spentInMonth(budgetMonth,c.id); const rem = round2(b-s);
+          return `<tr>
+            <td>${c.name}</td>
+            <td class="num-cell"><input data-budget-input="${c.id}" type="number" step="0.01" value="${b}" style="width:110px; text-align:right; padding:5px 8px;"></td>
+            <td class="num-cell">${fmt(s,'MVR')}</td>
+            <td class="num-cell ${rem<0?'neg':''}">${fmt(rem,'MVR')}</td>
+            <td style="width:120px;"><div class="progress"><div style="width:${b>0?Math.min(100,s/b*100):0}%; background:${s>b&&b>0?'var(--negative)':'var(--accent)'}"></div></div></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>
+    </div>
+  `).join('')}
+  <button class="btn btn-primary" id="save-budgets-btn">Save budgets</button>
+  `;
+}
+function saveBudgets(){
+  const inputs = document.querySelectorAll('[data-budget-input]');
+  const monthBudget = budgetForMonth(budgetMonth);
+  inputs.forEach(inp=>{ monthBudget[inp.dataset.budgetInput] = parseFloat(inp.value)||0; });
+  state.budgets[budgetMonth] = monthBudget;
+  logAudit('Updated budget', `${budgetMonth} budgets saved`);
+  scheduleSave(); toast('Budgets saved.'); go('budgets');
+}
+
+/* ---------- View: Side Hustle ---------- */
+function renderSideHustle(){
+  const projects = state.sideHustleProjects;
+  const agg = projects.reduce((a,p)=>{ const s=projectStats(p); a.capital+=s.capital; a.revenue+=s.revenue; a.profit+=s.profit; return a; }, {capital:0,revenue:0,profit:0});
+  return `
+  <div class="grid grid-3" style="margin-bottom:16px;">
+    <div class="card metric"><div class="metric-label">Total capital invested</div><div class="metric-value num">${fmt(agg.capital,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Total revenue</div><div class="metric-value num">${fmt(agg.revenue,'MVR')}</div></div>
+    <div class="card metric"><div class="metric-label">Net profit</div><div class="metric-value num ${agg.profit<0?'neg':'pos'}">${fmt(agg.profit,'MVR')}</div></div>
+  </div>
+  <div class="section-head"><h3>Projects</h3><button class="btn btn-sm" id="add-project-btn">+ New project</button></div>
+  ${projects.length? `<div class="grid grid-2">${projects.map(p=>{
+    const s = projectStats(p);
+    return `<div class="card">
+      <div class="section-head" style="margin-bottom:8px;"><h3 style="font-size:14px;">${p.name}</h3><span class="badge">${p.status}</span></div>
+      <div class="kv"><span class="k">Capital invested</span><span class="num">${fmt(s.capital,'MVR')}</span></div>
+      <div class="kv"><span class="k">Revenue</span><span class="num">${fmt(s.revenue,'MVR')}</span></div>
+      <div class="kv"><span class="k">Expenses</span><span class="num">${fmt(s.expenses,'MVR')}</span></div>
+      <div class="kv"><span class="k">Capital recovered</span><span class="num">${fmt(s.recovered,'MVR')}</span></div>
+      <div class="kv"><span class="k">Capital outstanding</span><span class="num">${fmt(s.capitalOutstanding,'MVR')}</span></div>
+      <div class="kv" style="font-weight:600;"><span class="k">Net profit</span><span class="num ${s.profit<0?'neg':'pos'}">${fmt(s.profit,'MVR')}</span></div>
+      <div class="kv"><span class="k">ROI</span><span class="num">${s.roi}%</span></div>
+      <div style="margin-top:10px; display:flex; gap:6px;">
+        <button class="btn btn-sm" data-project-txn="${p.id}">+ Transaction</button>
+        <button class="btn btn-sm" data-edit-project="${p.id}">Edit</button>
+      </div>
+    </div>`;
+  }).join('')}</div>` : `<div class="card"><div class="empty-state">${ICONS.empty}<div>No side-hustle projects yet.</div></div></div>`}
+  `;
+}
+function openProjectModal(id){
+  const p = id ? state.sideHustleProjects.find(x=>x.id===id) : null;
+  openModal(`
+    <h3>${p?'Edit project':'New side-hustle project'}</h3>
+    <div class="field"><label>Name</label><input id="p-name" value="${p?p.name:''}"></div>
+    <div class="field"><label>Status</label><select id="p-status">${['Planning','Active','Completed','Failed','Paused'].map(s=>`<option ${p&&p.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field"><label>Notes</label><input id="p-notes" value="${p?p.notes||'':''}"></div>
+    <div class="modal-actions">
+      ${p?`<button class="btn btn-danger" data-delete-project="${p.id}">Delete</button>`:''}
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" data-save-project="${p?p.id:''}">Save</button>
+    </div>
+  `);
+}
+function saveProject(id){
+  const name = document.getElementById('p-name').value.trim();
+  const status = document.getElementById('p-status').value;
+  const notes = document.getElementById('p-notes').value.trim();
+  if(!name){ toast('Name is required.'); return; }
+  if(id){ Object.assign(state.sideHustleProjects.find(x=>x.id===id), {name,status,notes}); logAudit('Edited side-hustle project', name); }
+  else { state.sideHustleProjects.push({ id:uid('proj'), name, status, notes }); logAudit('Added side-hustle project', name); }
+  scheduleSave(); closeModal(); go('sidehustle');
+}
+function deleteProject(id){
+  const inUse = state.transactions.some(t=>t.projectId===id);
+  if(inUse){ toast('This project has transactions linked to it and cannot be deleted.'); return; }
+  const p = state.sideHustleProjects.find(x=>x.id===id);
+  state.sideHustleProjects = state.sideHustleProjects.filter(x=>x.id!==id);
+  logAudit('Deleted side-hustle project', p?p.name:id);
+  scheduleSave(); closeModal(); go('sidehustle');
+}
+function openProjectTxnModal(projectId){
+  const accOptions = state.accounts.filter(a=>a.type!=='sidehustle').map(a=>`<option value="${a.id}">${a.name} (${a.currency})</option>`).join('');
+  openModal(`
+    <h3>Side-hustle transaction</h3>
+    <div class="field"><label>Type</label><select id="pt-type"><option>Side-hustle capital</option><option>Side-hustle revenue</option><option>Side-hustle expense</option></select></div>
+    <div class="field-row">
+      <div class="field"><label>Amount</label><input id="pt-amount" type="number" step="0.01"></div>
+      <div class="field"><label>Currency</label><select id="pt-currency"><option>MVR</option><option>USD</option><option>MYR</option></select></div>
+    </div>
+    <div class="field"><label>Account</label><select id="pt-account">${accOptions}</select></div>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input id="pt-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Description</label><input id="pt-desc"></div>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Capital moves money out of the account into the project (not counted as an expense). Revenue and expenses affect project profit.</div>
+    <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" data-save-project-txn="${projectId}">Save</button></div>
+  `);
+}
+function saveProjectTxn(projectId){
+  const type = document.getElementById('pt-type').value;
+  const amount = parseFloat(document.getElementById('pt-amount').value);
+  const currency = document.getElementById('pt-currency').value;
+  const accountId = document.getElementById('pt-account').value;
+  const date = document.getElementById('pt-date').value;
+  const description = document.getElementById('pt-desc').value.trim();
+  if(!amount || amount<=0){ toast('Enter a valid amount.'); return; }
+  state.transactions.push({ id:uid('t'), date, type, amount:round2(amount), currency, accountId, destAccountId:null, categoryId:null, projectId,
+    description, notes:'', createdAt:new Date().toISOString() });
+  logAudit('Side-hustle transaction', `${type} · ${fmt(amount,currency)}`);
+  scheduleSave(); closeModal(); toast('Saved.'); go('sidehustle');
+}
+
+/* ---------- View: Analytics ---------- */
+let projectionMonths = 12;
+function renderAnalytics(){
+  return `
+  <div class="grid grid-2" style="margin-bottom:16px;">
+    <div class="card"><div class="section-head"><h3>Cash balance over time (actual)</h3></div><canvas id="chart-cashflow" height="180"></canvas></div>
+    <div class="card"><div class="section-head"><h3>Budget vs. actual — ${budgetMonth}</h3></div><canvas id="chart-budget" height="180"></canvas></div>
+  </div>
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-head"><h3>Side-hustle capital, revenue & profit</h3></div>
+    <canvas id="chart-sidehustle" height="120"></canvas>
+  </div>
+  <div class="card">
+    <div class="section-head">
+      <h3>Projection</h3>
+      <div class="chip-group">
+        ${[3,6,12,24].map(m=>`<div class="chip ${projectionMonths===m?'active':''}" data-proj="${m}">${m}m</div>`).join('')}
+      </div>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Projects current cash + full scheduled loan disbursements − budgeted monthly spend (using ${budgetMonth}'s budget as a flat monthly estimate). Since tuition is no longer deducted automatically on receipt, this projection includes the full disbursement amount until you record your own tuition payment transactions. Side-hustle returns are not included. This is a projection, not an actual balance.</div>
+    <canvas id="chart-projection" height="140"></canvas>
+  </div>`;
+}
+function buildCashflowPoints(){
+  const txns = [...state.transactions].sort((a,b)=>a.date.localeCompare(b.date));
+  let running = state.accounts.filter(a=>a.type!=='sidehustle').reduce((s,a)=>s+convert(state,a.openingBalance,a.currency,'MVR'),0);
+  const points = [{x:'Start', y:round2(running)}];
+  txns.forEach(t=>{
+    if(t.type==='Side-hustle capital' || t.type==='Tuition payment' || t.type==='Expense') running -= convert(state,t.amount,t.currency,'MVR');
+    else if(t.type==='Transfer'){ /* net zero across personal accounts */ }
+    else running += convert(state,t.amount,t.currency,'MVR');
+    points.push({x:fmtDate(t.date), y:round2(running)});
+  });
+  return points;
+}
+function mountAnalyticsCharts(){
+  if(!window.Chart) return;
+  const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+  const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+  Chart.defaults.color = textColor; Chart.defaults.font.size = 11; Chart.defaults.borderColor = gridColor;
+
+  // Cash balance over time: reconstruct running total from sorted transactions
+  const points = buildCashflowPoints();
+  new Chart(document.getElementById('chart-cashflow'), { type:'line',
+    data:{ labels:points.map(p=>p.x), datasets:[{ data:points.map(p=>p.y), borderColor: accentColor(), backgroundColor:'transparent', tension:0.25, pointRadius:0, borderWidth:2 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{grid:{color:gridColor}} } } });
+
+  // Budget vs actual
+  const cats = state.budgetCategories.filter(c=>Number((budgetForMonth(budgetMonth)[c.id]||0))>0 || spentInMonth(budgetMonth,c.id)>0);
+  new Chart(document.getElementById('chart-budget'), { type:'bar',
+    data:{ labels:cats.map(c=>c.name), datasets:[
+      { label:'Budget', data:cats.map(c=>Number(budgetForMonth(budgetMonth)[c.id]||0)), backgroundColor: softAccent() },
+      { label:'Spent', data:cats.map(c=>spentInMonth(budgetMonth,c.id)), backgroundColor: negativeColor() },
+    ]},
+    options:{ scales:{ x:{grid:{display:false}}, y:{grid:{color:gridColor}} } } });
+
+  // Side hustle
+  const projects = state.sideHustleProjects;
+  new Chart(document.getElementById('chart-sidehustle'), { type:'bar',
+    data:{ labels:projects.map(p=>p.name), datasets:[
+      { label:'Capital', data:projects.map(p=>projectStats(p).capital), backgroundColor: softAccent() },
+      { label:'Revenue', data:projects.map(p=>projectStats(p).revenue), backgroundColor: positiveColor() },
+      { label:'Profit', data:projects.map(p=>projectStats(p).profit), backgroundColor: accentColor() },
+    ]},
+    options:{ indexAxis:'y', scales:{ x:{grid:{color:gridColor}}, y:{grid:{display:false}} } } });
+
+  // Projection
+  const proj = computeProjection(projectionMonths);
+  new Chart(document.getElementById('chart-projection'), { type:'line',
+    data:{ labels:proj.map(p=>p.label), datasets:[{ data:proj.map(p=>p.balance), borderColor: accentColor(), backgroundColor: softAccent(), fill:true, tension:0.2, pointRadius:2 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{grid:{color:gridColor}} } } });
+}
+function accentColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); }
+function softAccent(){ return getComputedStyle(document.documentElement).getPropertyValue('--accent-soft').trim(); }
+function positiveColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--positive').trim(); }
+function negativeColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--negative').trim(); }
+
+function computeProjection(months){
+  let balance = totalAvailableMVR();
+  const monthlyBudget = Object.values(budgetForMonth(budgetMonth)).reduce((a,b)=>a+Number(b||0),0);
+  const out = [{label:'Now', balance:round2(balance)}];
+  const today = new Date();
+  for(let i=1;i<=months;i++){
+    const d = new Date(today.getFullYear(), today.getMonth()+i, 1);
+    const monthStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    // add any disbursement cash portions landing in this month
+    state.loan.disbursements.filter(x=>x.status!=='received' && x.date.slice(0,7)===monthStr).forEach(x=>{ balance += disbTotal(x); });
+    balance -= monthlyBudget;
+    out.push({ label: d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}), balance: round2(balance) });
+  }
+  return out;
+}
+
+/* ---------- View: Settings ---------- */
+let settingsTab = 'currency';
+function renderSettings(){
+  const tabs = [['currency','Currency'],['sync','Sync'],['data','Data'],['audit','Audit log'],['security','Security'],['appearance','Appearance']];
+  return `
+  <div class="tabs">${tabs.map(t=>`<div class="tab ${settingsTab===t[0]?'active':''}" data-settings-tab="${t[0]}">${t[1]}</div>`).join('')}</div>
+  <div id="settings-body">${renderSettingsBody()}</div>
+  `;
+}
+function renderSettingsBody(){
+  if(settingsTab==='currency') return renderCurrencySettings();
+  if(settingsTab==='sync') return renderSyncSettings();
+  if(settingsTab==='data') return renderDataSettings();
+  if(settingsTab==='audit') return renderAuditLog();
+  if(settingsTab==='security') return renderSecuritySettings();
+  if(settingsTab==='appearance') return renderAppearanceSettings();
+  return '';
+}
+function renderSyncSettings(){
+  const cfg = getSyncConfig();
+  if(!cfg.url || !cfg.key){
+    return `<div class="card">
+      <h3 style="margin-bottom:10px;">Connect cloud sync</h3>
+      <p class="hint" style="margin-bottom:12px; line-height:1.6;">To move your data across devices, connect a free Supabase project — your own private database and login, not shared with anyone (including Anthropic). See SETUP.md included with this app for the one-time steps (create project, run the SQL snippet, copy two values here).</p>
+      <div class="field"><label>Supabase Project URL</label><input id="sync-url" placeholder="https://xxxx.supabase.co"></div>
+      <div class="field"><label>Supabase anon public key</label><input id="sync-key" placeholder="eyJhbGciOi..."></div>
+      <button class="btn btn-primary" id="save-sync-config-btn">Save & connect</button>
+    </div>`;
+  }
+  if(!syncStatus.loggedIn){
+    return `<div class="card">
+      <h3 style="margin-bottom:10px;">Sign in to sync</h3>
+      <div class="field"><label>Email</label><input id="sync-email" type="email"></div>
+      <div class="field"><label>Password</label><input id="sync-password" type="password"></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="sync-signup-btn">Create account</button>
+        <button class="btn btn-primary" id="sync-signin-btn">Sign in</button>
+      </div>
+      <p class="hint" style="margin-top:10px;">Use the same email and password on every device you want kept in sync.</p>
+      ${syncStatus.error? `<p class="hint" style="color:var(--negative); margin-top:8px;">${syncStatus.error}</p>`:''}
+      <button class="btn btn-ghost btn-sm" id="sync-reset-config-btn" style="margin-top:14px;">Change project connection</button>
+    </div>`;
+  }
+  return `<div class="card">
+    <h3 style="margin-bottom:10px;">Sync status</h3>
+    <div class="kv"><span class="k">Signed in as</span><span>${syncStatus.email}</span></div>
+    <div class="kv"><span class="k">Last synced</span><span>${syncStatus.lastSynced? new Date(syncStatus.lastSynced).toLocaleString('en-GB') : 'not yet'}</span></div>
+    ${syncStatus.error? `<div class="hint" style="color:var(--negative);">Error: ${syncStatus.error}</div>`:''}
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button class="btn" id="sync-now-btn">Sync now</button>
+      <button class="btn btn-danger" id="sync-signout-btn">Sign out</button>
+    </div>
+    <p class="hint" style="margin-top:10px;">On your other device, open this same web address and sign in with the same email and password.</p>
+  </div>`;
+}
+function renderCurrencySettings(){
+  return `
+  <div class="card">
+    <div class="section-head"><h3>Exchange rates</h3><span class="label-sm">Base currency: ${state.currencies.base}</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Pair</th><th class="num-cell">Rate</th><th>Effective date</th><th>Last updated</th><th>Source / note</th><th></th></tr></thead>
+      <tbody>
+      ${state.currencies.rates.map(r=>`
+        <tr>
+          <td>1 ${r.currency} = X ${state.currencies.base}</td>
+          <td class="num-cell num">${r.rate}</td>
+          <td>${fmtDate(r.effectiveDate)}</td>
+          <td>${fmtDate(r.updatedAt)}</td>
+          <td style="max-width:220px; font-size:12px; color:var(--text-muted);">${r.source||'—'}</td>
+          <td><button class="btn btn-sm" data-edit-rate="${r.currency}">Edit</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div class="hint" style="margin-top:10px;">Rates are entered manually and never treated as live market data. All calculations that convert currency use whichever rate is currently saved here.</div>
+  </div>`;
+}
+function openRateModal(currency){
+  const r = state.currencies.rates.find(x=>x.currency===currency);
+  openModal(`
+    <h3>Edit rate — 1 ${currency} = X ${state.currencies.base}</h3>
+    <div class="field"><label>Rate</label><input id="r-rate" type="number" step="0.0001" value="${r.rate}"></div>
+    <div class="field"><label>Effective date</label><input id="r-effective" type="date" value="${r.effectiveDate}"></div>
+    <div class="field"><label>Source / note</label><input id="r-source" value="${r.source||''}"></div>
+    <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" data-save-rate="${currency}">Save</button></div>
+  `);
+}
+function saveRate(currency){
+  const r = state.currencies.rates.find(x=>x.currency===currency);
+  const rate = parseFloat(document.getElementById('r-rate').value);
+  if(!rate || rate<=0){ toast('Enter a valid rate.'); return; }
+  r.rate = rate; r.effectiveDate = document.getElementById('r-effective').value; r.source = document.getElementById('r-source').value.trim();
+  r.updatedAt = new Date().toISOString().slice(0,10);
+  logAudit('Updated exchange rate', `1 ${currency} = ${rate} ${state.currencies.base}`);
+  scheduleSave(); closeModal(); go('settings');
+}
+function renderDataSettings(){
+  return `
+  <div class="card" style="margin-bottom:14px;">
+    <div class="section-head"><h3>Export</h3></div>
+    <p class="hint" style="margin-bottom:10px;">Download a complete copy of your data as JSON. Use this to back up, inspect, or edit values (like education fee figures) precisely.</p>
+    <button class="btn" id="export-json-btn">Export JSON</button>
+  </div>
+  <div class="card">
+    <div class="section-head"><h3>Import</h3></div>
+    <p class="hint" style="margin-bottom:10px;">Importing replaces your data. You'll see a summary and be asked to confirm before anything changes.</p>
+    <input type="file" id="import-file-input" accept="application/json">
+  </div>`;
+}
+function renderAuditLog(){
+  const log = state.auditLog.slice(0,200);
+  return `<div class="card">
+    ${log.length? log.map(a=>`<div class="audit-item"><div class="audit-time">${new Date(a.ts).toLocaleString('en-GB')}</div><div><strong>${a.action}</strong>${a.details? ' — '+a.details:''}</div></div>`).join('')
+      : `<div class="empty-state">${ICONS.empty}<div>No changes logged yet.</div></div>`}
+  </div>`;
+}
+function renderSecuritySettings(){
+  return `<div class="card">
+    <h3 style="margin-bottom:10px;">How this is secured</h3>
+    <p class="hint" style="margin-bottom:8px; line-height:1.6;">By default, your data is saved only to this browser's local storage on this device. Nothing is sent anywhere, there are no trackers, and nobody else can see it unless they have access to this device and browser.</p>
+    <p class="hint" style="margin-bottom:8px; line-height:1.6;">If you turn on Sync (Settings → Sync), your data is also stored in a private Supabase project that you own and control — protected by row-level security so only your signed-in account can read or write it. Anthropic has no access to that data. Treat your sync password like a bank password; anyone who has it can sign in and see your finances.</p>
+    <p class="hint" style="line-height:1.6;">This is a personal, single-user tool rather than a hardened multi-user system — there's no rate-limiting, 2FA, or intrusion monitoring beyond what Supabase provides by default. That's an appropriate level of security for private personal use, but if you ever wanted something enterprise-grade, that's a different, larger project.</p>
+  </div>`;
+}
+function renderAppearanceSettings(){
+  return `<div class="card">
+    <h3 style="margin-bottom:12px;">Theme</h3>
+    <div class="chip-group">
+      <div class="chip ${state.settings.theme==='light'?'active':''}" data-theme-set="light">Light</div>
+      <div class="chip ${state.settings.theme==='dark'?'active':''}" data-theme-set="dark">Dark</div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Import/export ---------- */
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `edu-finance-manager-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  logAudit('Exported data', 'JSON backup downloaded');
+  scheduleSave();
+}
+function handleImportFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let parsed;
+    try{ parsed = JSON.parse(reader.result); } catch(e){ toast('That file is not valid JSON.'); return; }
+    if(!parsed.accounts || !parsed.transactions || !parsed.loan){ toast('This file does not look like an EDU Finance Manager backup.'); return; }
+    openModal(`
+      <h3>Confirm import</h3>
+      <p class="hint" style="margin-bottom:10px;">This will replace your current data with the file's contents:</p>
+      <div class="kv"><span class="k">Accounts</span><span>${parsed.accounts.length}</span></div>
+      <div class="kv"><span class="k">Transactions</span><span>${parsed.transactions.length}</span></div>
+      <div class="kv"><span class="k">Side-hustle projects</span><span>${(parsed.sideHustleProjects||[]).length}</span></div>
+      <div class="kv"><span class="k">Loan disbursements</span><span>${(parsed.loan.disbursements||[]).length}</span></div>
+      <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="confirm-import-btn">Replace my data</button></div>
+    `);
+    document.getElementById('confirm-import-btn').addEventListener('click', ()=>{
+      state = Object.assign(defaultState(), parsed);
+      logAudit('Imported data', 'Full data replaced from backup file');
+      scheduleSave(); closeModal(); toast('Data imported.'); go('overview');
+    });
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- Theme ---------- */
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', state.settings.theme);
+  document.getElementById('theme-toggle').innerHTML = state.settings.theme==='dark' ? ICONS.sun : ICONS.moon;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeMeta) themeMeta.setAttribute('content', bg);
+  const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if(statusBarMeta) statusBarMeta.setAttribute('content', state.settings.theme==='dark' ? 'black-translucent' : 'default');
+}
+
+/* ---------- Event delegation ---------- */
+function attachEvents(){
+  document.body.addEventListener('click', (e)=>{
+    const nav = e.target.closest('[data-nav]'); if(nav){ go(nav.dataset.nav); return; }
+    const close = e.target.closest('[data-close]'); if(close){ closeModal(); return; }
+
+    if(e.target.closest('#theme-toggle')){ state.settings.theme = state.settings.theme==='dark'?'light':'dark'; applyTheme(); scheduleSave(); return; }
+    if(e.target.closest('#add-txn-btn')){ openAddTransactionModal(); return; }
+    const saveTxn = e.target.closest('[data-save-txn]'); if(saveTxn){ saveTransaction(); return; }
+
+    const disbRow = e.target.closest('[data-disb], [data-disb-detail]');
+    if(disbRow){ const id = disbRow.dataset.disb || disbRow.dataset.disbDetail; openDisbursementModal(id); return; }
+    const markRec = e.target.closest('[data-mark-received]'); if(markRec){ markDisbursementReceived(markRec.dataset.markReceived); return; }
+
+    if(e.target.closest('#add-account-btn')){ openAccountModal(null); return; }
+    const editAcc = e.target.closest('[data-edit-account]'); if(editAcc){ openAccountModal(editAcc.dataset.editAccount); return; }
+    const saveAcc = e.target.closest('[data-save-account]'); if(saveAcc){ saveAccount(saveAcc.dataset.saveAccount || null); return; }
+    const delAcc = e.target.closest('[data-delete-account]'); if(delAcc){ deleteAccount(delAcc.dataset.deleteAccount); return; }
+
+    const filterChip = e.target.closest('[data-filter]'); if(filterChip){ txnFilter = filterChip.dataset.filter; go('transactions'); return; }
+
+    if(e.target.closest('#save-budgets-btn')){ saveBudgets(); return; }
+
+    if(e.target.closest('#add-project-btn')){ openProjectModal(null); return; }
+    const editProj = e.target.closest('[data-edit-project]'); if(editProj){ openProjectModal(editProj.dataset.editProject); return; }
+    const saveProj = e.target.closest('[data-save-project]'); if(saveProj){ saveProject(saveProj.dataset.saveProject || null); return; }
+    const delProj = e.target.closest('[data-delete-project]'); if(delProj){ deleteProject(delProj.dataset.deleteProject); return; }
+    const projTxnBtn = e.target.closest('[data-project-txn]'); if(projTxnBtn){ openProjectTxnModal(projTxnBtn.dataset.projectTxn); return; }
+    const saveProjTxn = e.target.closest('[data-save-project-txn]'); if(saveProjTxn){ saveProjectTxn(saveProjTxn.dataset.saveProjectTxn); return; }
+
+    const projChip = e.target.closest('[data-proj]'); if(projChip){ projectionMonths = Number(projChip.dataset.proj); go('analytics'); return; }
+
+    const settingsTabEl = e.target.closest('[data-settings-tab]'); if(settingsTabEl){ settingsTab = settingsTabEl.dataset.settingsTab; document.getElementById('settings-body').innerHTML = renderSettingsBody(); return; }
+    const editRateEl = e.target.closest('[data-edit-rate]'); if(editRateEl){ openRateModal(editRateEl.dataset.editRate); return; }
+    const saveRateEl = e.target.closest('[data-save-rate]'); if(saveRateEl){ saveRate(saveRateEl.dataset.saveRate); return; }
+    if(e.target.closest('#export-json-btn')){ exportJSON(); return; }
+    const themeSet = e.target.closest('[data-theme-set]'); if(themeSet){ state.settings.theme = themeSet.dataset.themeSet; applyTheme(); scheduleSave(); document.getElementById('settings-body').innerHTML = renderSettingsBody(); return; }
+
+    if(e.target.closest('#save-sync-config-btn')){
+      const url = document.getElementById('sync-url').value.trim();
+      const key = document.getElementById('sync-key').value.trim();
+      if(!url || !key){ toast('Enter both the project URL and anon key.'); return; }
+      setSyncConfig(url,key); initSupabase();
+      if(!supa){ toast('Could not connect — check the URL and key.'); return; }
+      toast('Connected. Now sign in or create an account.');
+      document.getElementById('settings-body').innerHTML = renderSettingsBody();
+      return;
+    }
+    if(e.target.closest('#sync-reset-config-btn')){ clearSyncConfig(); document.getElementById('settings-body').innerHTML = renderSettingsBody(); return; }
+    if(e.target.closest('#sync-signup-btn')){
+      const email = document.getElementById('sync-email').value.trim();
+      const password = document.getElementById('sync-password').value;
+      if(!email || password.length<6){ toast('Enter an email and a password of at least 6 characters.'); return; }
+      syncSignUp(email,password); return;
+    }
+    if(e.target.closest('#sync-signin-btn')){
+      const email = document.getElementById('sync-email').value.trim();
+      const password = document.getElementById('sync-password').value;
+      if(!email || !password){ toast('Enter your email and password.'); return; }
+      syncSignIn(email,password); return;
+    }
+    if(e.target.closest('#sync-signout-btn')){ syncSignOut(); return; }
+    if(e.target.closest('#sync-now-btn')){ pullAndMerge().then(()=>toast('Synced.')); return; }
+  });
+
+  document.body.addEventListener('change', (e)=>{
+    if(e.target.id==='budget-month'){ budgetMonth = e.target.value; go('budgets'); return; }
+    if(e.target.id==='import-file-input'){ if(e.target.files[0]) handleImportFile(e.target.files[0]); return; }
+  });
+}
+
+/* ---------- Init ---------- */
+async function init(){
+  await loadState();
+  applyTheme();
+  attachEvents();
+  go('overview');
+  initSupabase();
+  if(supa) await checkSession();
+}
+init();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>
